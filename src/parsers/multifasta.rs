@@ -5,14 +5,14 @@ pub struct Section<'a, T> {
     done: bool,
 }
 
-impl<T: Iterator<Item=u8>> Iterator for Section<T> {
+impl<T: Iterator<Item=u8> Iterator for Section<T> {
     type Item = u8;
 
-    fn next(&mut self) -> Option<u8> {
+    fn next(&mut self) -> Option<Self::Item> {
         if self.done {
             return None;
         }
-        while let Some(c) = self.file.next() {
+        while let Some(c) = try!(self.file.next()) {
             match c {
                 b'a' | b'A' => 0b00,
                 b'c' | b'C' => 0b01,
@@ -59,7 +59,7 @@ impl<T: Iterator<Item=u8>> SectionReader<T> {
 impl<T: Iterator<Item=u8>> Iterator for SectionReader<T> {
     type Item = &mut Section<T>;
 
-    fn next(&mut self) -> Self::Item {
+    fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.file.next() {
                 None => return None,
@@ -67,6 +67,6 @@ impl<T: Iterator<Item=u8>> Iterator for SectionReader<T> {
                 Some(_) => continue,
             }
         }
-        Section { file: &mut self.file }
+        Some(Section { file: &mut self.file })
     }
 }

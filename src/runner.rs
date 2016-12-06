@@ -44,6 +44,7 @@ pub fn run(opts: Options) -> Result<()> {
     info!("Done counting {} k-mers", counts.len());
     let kmer_len = opts.kmer_len as usize;
     let mut output_list = Vec::new();
+    // TODO: combine with filters, switch to jobsteal
     counts.par_iter()
         .map(|&(mut kmer, count)| {
             let mut kmer_str = vec![b'0'; kmer_len + 1];

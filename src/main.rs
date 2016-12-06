@@ -7,7 +7,7 @@ extern crate clap;
 extern crate memmap;
 extern crate memchr;
 
-extern crate rayon;
+extern crate jobsteal;
 
 #[macro_use]
 extern crate log;
@@ -24,6 +24,9 @@ mod count;
 mod sort;
 mod run_counts;
 mod runner;
+
+mod readers;
+mod parsers;
 
 #[cfg(test)]
 mod tests;
