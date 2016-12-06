@@ -61,7 +61,7 @@ pub fn run_counts(input_slice: &[u8], opts: &Options) -> Vec<Option<(u64, u16)>>
         kmer_len: opts.kmer_len,
         kmer_bitmask: kmer_bitmask,
     };
-    let mut counts: Vec<Option<(u64, u16)>> = genome_slices.par_iter()
+    let mut counts: Vec<Option<(u64, u16)>> = genome_slices.into_par_iter()
         // Count each slice
         // Converts to an option for sorting
         .map(|slice| count::count(slice, &count_options))

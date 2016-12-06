@@ -9,11 +9,18 @@ use memmap;
 use memmap::Mmap;
 use rayon::prelude::*;
 
+pub enum JoinMethod {
+    Concat,
+    Sort,
+}
+
 pub struct Options {
     pub input: String,
     pub kmer_len: u8,
     pub min_count: u16,
     pub only_presence: bool,
+    // TODO:
+    pub join_methods: Vec<JoinMethod>,
 }
 
 pub fn run(opts: Options) -> Result<()> {

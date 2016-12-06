@@ -35,11 +35,16 @@ fn main() {
         .version("1.0")
         .author("Lee Bousfield <ljbousfield@gmail.com>")
         .about("Counts k-mers")
-        .arg(clap::Arg::with_name("input")
+        .arg(clap::Arg::with_name("inputs")
              .required(true)
              .takes_value(true)
-             .value_name("INPUT")
-             .help("The input FASTA file"))
+             .value_name("INPUT...")
+             .help("The input FASTA files"))
+        .arg(clap::Arg::with_name("join_methods")
+             .multiple(true)
+             .value_name("METHODS...")
+             .possible_values(&["concat", "sort"])
+             .help("The methods (from lowest level to highest level) used to join kmer lists together"))
         .arg(clap::Arg::with_name("kmer_len")
              .short("n")
              .long("kmer-length")
@@ -59,6 +64,15 @@ fn main() {
         .get_matches();
 
     let input = args.value_of("input").unwrap();
+
+    let join_methods = args.values_of("join_methods").unwrap().map(|m| match m {
+        "concat" => runner::JoinMethod::Concat,
+        "sort" => runner::JoinMethod::Sort,
+        method @ _ => {
+            error!("Unknown join method {}", method);
+            exit(1);
+        }
+    }).collect::<Vec<_>>();
 
     let kmer_len = args.value_of("kmer_len")
         .unwrap()
@@ -91,6 +105,7 @@ fn main() {
         kmer_len: kmer_len,
         min_count: min_count,
         only_presence: only_presence,
+        join_methods: join_methods,
     };
     info!("Argument parsing complete");
     if let Err(ref e) = runner::run(runner_opts) {
