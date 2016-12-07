@@ -1,7 +1,9 @@
+use std::marker::PhantomData;
+
 use errors::*;
 use nucleotide::Nucleotide;
 
-pub struct Section<'a, T> {
+pub struct Section<'a, T: 'a> {
     file: &'a mut T,
     done: bool,
 }
@@ -35,17 +37,18 @@ impl<'a, T: Iterator<Item = Result<u8>>> Iterator for Section<'a, T> {
     }
 }
 
-pub struct SectionReader<T> {
+pub struct SectionReader<'a, T: 'a> {
     file: T,
+    phantom: PhantomData<&'a T>,
 }
 
-impl<T: Iterator<Item = Result<u8>>> SectionReader<T> {
-    pub fn new(file: T) -> SectionReader<T> {
+impl<'a, T: Iterator<Item = Result<u8>>> SectionReader<'a, T> {
+    pub fn new(file: T) -> SectionReader<'a, T> {
         SectionReader { file: file }
     }
 }
 
-impl<'a, T: Iterator<Item = u8>> Iterator for SectionReader<T> {
+impl<'a, T: Iterator<Item = u8>> Iterator for SectionReader<'a, T> {
     type Item = Result<Section<'a, T>>;
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -33,13 +33,9 @@ pub struct Options {
 pub fn run(opts: Options) -> Result<()> {
     let job_pool = jobsteal::make_pool(opts.threads).unwrap();
 
-    let mmap_store = Vec::new();
     let inputs = opts.inputs.into_iter().map(|input| {
         let file = if opts.mmap {
-            readers::mmap::open(input).map(|mmap| {
-                mmap_store.push(mmap);
-                Box::new(unsafe { mmap.as_slice() }.iter())
-            });
+            readers::mmap::open(input).map(|it| Box::new(it.map(Ok)))
         } else {
             readers::file::open(input).map(Box::new)
         };

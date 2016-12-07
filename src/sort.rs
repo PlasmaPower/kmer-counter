@@ -3,10 +3,11 @@ use std::cmp::Ordering;
 use std::fmt::Debug;
 
 use jobsteal::Pool;
+use jobsteal::Spawner;
 
 trait Joiner {
     fn is_parallel() -> bool;
-    fn join<A, RA, B, RB>(oper_a: A, oper_b: B) -> (RA, RB)
+    fn join<A, RA, B, RB>(&self, oper_a: A, oper_b: B) -> (RA, RB)
         where A: FnOnce() -> RA + Send,
               B: FnOnce() -> RB + Send,
               RA: Send,
@@ -14,7 +15,7 @@ trait Joiner {
 }
 
 struct Parallel<'a> {
-    pool: &'a Pool,
+    spawner: &'a Spawner<'a, 'static>,
 }
 
 impl<'a> Joiner for Parallel<'a> {
@@ -29,7 +30,7 @@ impl<'a> Joiner for Parallel<'a> {
               RA: Send,
               RB: Send
     {
-        self.pool.join(oper_a, oper_b)
+        self.spawner.join(oper_a, oper_b)
     }
 }
 
@@ -74,7 +75,7 @@ fn quick_sort<J: Joiner,
 pub fn sort<K: Ord + Clone + Send + Debug,
             V: Send + Debug,
             F: Fn(&K, &mut V, V) + Sync>(v: &mut [Option<(K, V)>], merge_dups: F, pool: Pool) {
-    quick_sort(v, &merge_dups, Parallel { pool: pool })
+    quick_sort(v, &merge_dups, Parallel { spawner: &pool.spawner() })
 }
 
 fn compare<K: Ord, V>(a: &Option<(K, V)>, b: &Option<(K, V)>) -> Ordering {
