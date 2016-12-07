@@ -44,11 +44,11 @@ fn main() {
              .takes_value(true)
              .value_name("INPUT...")
              .help("The input FASTA files"))
-        .arg(clap::Arg::with_name("join_methods")
-             .multiple(true)
-             .value_name("METHODS...")
-             .possible_values(&["concat", "sort"])
-             .help("The methods (from lowest level to highest level) used to join kmer lists together"))
+        .arg(clap::Arg::with_name("threads")
+             .short("t")
+             .long("threads")
+             .default_value("4")
+             .help("The number of threads used"))
         .arg(clap::Arg::with_name("kmer_len")
              .short("n")
              .long("kmer-length")
@@ -65,24 +65,30 @@ fn main() {
              .long("min-count")
              .default_value("1")
              .help("The minimum count to be outputted"))
-        .get_matches();
+        .arg(clap::Arg::with_name("join_methods")
+             .multiple(true)
+             .value_name("METHODS...")
+             .possible_values(&["concat", "sort"])
+             .help("The methods (from lowest level to highest level) used to join kmer lists together")))
+             .get_matches();
 
     let input = args.value_of("input").unwrap();
 
-    let join_methods = args.values_of("join_methods").unwrap().map(|m| match m {
-        "concat" => runner::JoinMethod::Concat,
-        "sort" => runner::JoinMethod::Sort,
-        method @ _ => {
-            error!("Unknown join method {}", method);
+    let threads = args.value_of("threads")
+        .unwrap()
+        .parse::<usize>()
+        .unwrap_or_else(|e| {
+            error!("Failed to parse thread count as a positive integer");
+            error!("{}", e);
             exit(1);
-        }
-    }).collect::<Vec<_>>();
+        });
 
     let kmer_len = args.value_of("kmer_len")
         .unwrap()
         .parse::<u8>()
-        .unwrap_or_else(|_| {
+        .unwrap_or_else(|e| {
             error!("Failed to parse k-mer length as a positive integer");
+            error!("{}", e);
             exit(1);
         });
     if kmer_len == 0 {
@@ -98,17 +104,28 @@ fn main() {
     let min_count = args.value_of("min_count")
         .unwrap()
         .parse::<u16>()
-        .unwrap_or_else(|_| {
+        .unwrap_or_else(|e| {
             error!("Failed to parse minimum count as a positive integer");
+            error!("{}", e);
             exit(1);
         });
     let only_presence = args.is_present("only_presence");
+
+    let join_methods = args.values_of("join_methods").unwrap().map(|m| match m {
+        "concat" => runner::JoinMethod::Concat,
+        "sort" => runner::JoinMethod::Sort,
+        method @ _ => {
+            error!("Unknown join method {}", method);
+            exit(1);
+        }
+    }).collect::<Vec<_>>();
 
     let runner_opts = runner::Options {
         input: input.to_string(),
         kmer_len: kmer_len,
         min_count: min_count,
         only_presence: only_presence,
+        threads: threads,
         join_methods: join_methods,
     };
     info!("Argument parsing complete");
