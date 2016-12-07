@@ -13,7 +13,6 @@ use parsers;
 
 use memmap;
 use memmap::Mmap;
-use rayon::prelude::*;
 
 pub enum JoinMethod {
     Concat,

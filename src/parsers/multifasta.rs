@@ -1,5 +1,3 @@
-use std::file::File;
-
 use errors;
 use nucleotide::Nucleotide;
 

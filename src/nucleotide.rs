@@ -32,7 +32,7 @@ impl Into<u8> for Nucleotide {
     /// Also guarenteed to have same sorting.
     /// This function compiles down to a move.
     #[inline]
-    pub fn into(self) -> u8 {
+    fn into(self) -> u8 {
         match self {
             Nucleotide::A => 0,
             Nucleotide::C => 1,
@@ -45,8 +45,8 @@ impl Into<u8> for Nucleotide {
 impl From<u8> for Nucleotide {
     /// This function compiles down to a move.
     #[inline]
-    pub fn into(self) -> u8 {
-        match self {
+    fn from(num: u8) -> Nucleotide {
+        match num {
             0 => Nucleotide::A,
             1 => Nucleotide::C,
             2 => Nucleotide::G,

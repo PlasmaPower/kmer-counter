@@ -1,4 +1,4 @@
-use std::file::File;
+use std::fs::File;
 use std::io::Read;
 use std::io::BufReader;
 use std::io::Bytes;
