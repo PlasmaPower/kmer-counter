@@ -6,7 +6,7 @@ use std::io::Bytes;
 use errors;
 
 pub struct FileIterator {
-    reader: Bytes<BufReader>,
+    reader: Bytes<BufReader<File>>,
 }
 
 impl Iterator for FileIterator {
