@@ -75,8 +75,8 @@ fn main() {
              .multiple(true)
              .value_name("METHODS...")
              .possible_values(&["concat", "sort"])
-             .help("The methods (from lowest level to highest level) used to join kmer lists together")))
-             .get_matches();
+             .help("The methods (from lowest level to highest level) used to join kmer lists together"))
+         .get_matches();
 
     let inputs = args.values_of("input").unwrap().collect::<Vec<_>>();
 

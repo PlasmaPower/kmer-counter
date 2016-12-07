@@ -4,7 +4,7 @@ use kmer_length::KmerLength;
 pub struct Kmers<T> {
     input: T,
     kmer_len: KmerLength,
-    buffer: 0u64,
+    buffer: u64,
 }
 
 impl<T: Iterator<Result<Nucleotide>>> Kmers<T> {
