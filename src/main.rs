@@ -22,7 +22,7 @@ mod errors {
 
 mod nucleotide;
 mod kmer_length;
-mod count;
+mod get_kmers;
 mod sort;
 mod output_counts;
 mod runner;
@@ -32,6 +32,8 @@ mod parsers;
 
 #[cfg(test)]
 mod tests;
+
+use kmer_length::KmerLength;
 
 fn main() {
     env_logger::init().unwrap();
@@ -50,6 +52,9 @@ fn main() {
              .long("threads")
              .default_value("4")
              .help("The number of threads used"))
+        .arg(clap::Arg::with_name("mmap")
+             .long("mmap")
+             .help("Use memory maps instead of traditional file I/O"))
         .arg(clap::Arg::with_name("kmer_len")
              .short("n")
              .long("kmer-length")
@@ -73,7 +78,7 @@ fn main() {
              .help("The methods (from lowest level to highest level) used to join kmer lists together")))
              .get_matches();
 
-    let input = args.value_of("input").unwrap();
+    let inputs = args.values_of("input").unwrap().collect::<Vec<_>>();
 
     let threads = args.value_of("threads")
         .unwrap()
@@ -122,8 +127,8 @@ fn main() {
     }).collect::<Vec<_>>();
 
     let runner_opts = runner::Options {
-        input: input.to_string(),
-        kmer_len: kmer_len,
+        inputs: inputs,
+        kmer_len: KmerLength::new(kmer_len),
         min_count: min_count,
         only_presence: only_presence,
         threads: threads,
