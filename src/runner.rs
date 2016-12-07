@@ -3,7 +3,7 @@ use std::io::Write;
 use std::io::BufWriter;
 
 use errors::*;
-use run_counts;
+use count;
 
 use memmap;
 use memmap::Mmap;
@@ -35,11 +35,7 @@ pub fn run(opts: Options) -> Result<()> {
     let input_slice = unsafe { input_mmap.as_slice() };
     info!("Input file opened");
 
-    let counts = run_counts::run_counts(input_slice, &count_opts)
-        .into_iter()
-        .filter_map(|n| n)
-        .filter(|&(_, c)| c >= min_count)
-        .collect::<Vec<_>>();
+    let counts = run_counts::run_counts(input_slice, &count_opts);
 
     info!("Done counting {} k-mers", counts.len());
     let kmer_len = opts.kmer_len as usize;

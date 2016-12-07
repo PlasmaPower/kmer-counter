@@ -51,12 +51,6 @@ pub fn run_counts(input_slice: &[u8], opts: &Options) -> Vec<Option<(u64, u16)>>
     let genome_slices = get_genome_slices(input_slice);
     info!("{} genome slices found", genome_slices.len());
 
-    let kmer_bitmask = if opts.kmer_len < 32 {
-        (1 << (2 * (opts.kmer_len as u64))) - 1
-    } else {
-        // We don't want it to overflow
-        ::std::u64::MAX
-    };
     let count_options = count::Options {
         kmer_len: opts.kmer_len,
         kmer_bitmask: kmer_bitmask,

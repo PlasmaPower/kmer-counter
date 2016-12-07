@@ -20,9 +20,10 @@ mod errors {
     error_chain!{}
 }
 
+mod nucleotide;
+mod kmer_length;
 mod count;
 mod sort;
-mod run_counts;
 mod runner;
 
 mod readers;
