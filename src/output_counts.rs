@@ -1,15 +1,23 @@
 use std::io::Write;
+use std::io::BufWriter;
+use std::sync::Mutex;
 
 use jobsteal::Pool;
 
 use errors::*;
+use kmer_length::KmerLength;
+use nucleotide::Nucleotide;
 
-pub fn output(pool: Pool, stream: Write) {
+pub fn output(pool: Pool,
+              stream: Write,
+              counts: Vec<Option<(u64, u16)>>,
+              kmer_len: KmerLength,
+              min_count: u16) {
     let stream = Mutex::new(BufWriter::new(stream));
-    let kmer_len = opts.kmer_len.length() as usize;
+    let kmer_len = kmer_len.length() as usize;
     pool.scope(|scope| {
         for (kmer, count) in counts.filter_map(|n| n) {
-            if count < opts.min_count {
+            if count < min_count {
                 continue;
             }
             scope.submit(move || {

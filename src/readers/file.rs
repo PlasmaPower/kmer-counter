@@ -3,7 +3,7 @@ use std::io::Read;
 use std::io::BufReader;
 use std::io::Bytes;
 
-use errors;
+use errors::*;
 
 pub struct FileIterator {
     reader: Bytes<BufReader<File>>,

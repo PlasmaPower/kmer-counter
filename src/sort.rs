@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use std::fmt::Debug;
 
-use jobsteal;
+use jobsteal::Pool;
 
 trait Joiner {
     fn is_parallel() -> bool;
@@ -14,7 +14,7 @@ trait Joiner {
 }
 
 struct Parallel<'a> {
-    pool: &'a jobsteal::Pool,
+    pool: &'a Pool,
 }
 
 impl<'a> Joiner for Parallel<'a> {

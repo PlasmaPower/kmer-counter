@@ -1,1 +1,1 @@
-mod multifasta;
+pub mod multifasta;

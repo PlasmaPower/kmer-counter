@@ -4,15 +4,16 @@ use std::io::BufWriter;
 use std::sync::Mutex;
 use std::iter;
 
+use jobsteal;
+
 use errors::*;
+use kmer_length::KmerLength;
+use sort::sort;
 use get_kmers;
 use output_counts;
 
 use readers;
 use parsers;
-
-use memmap;
-use memmap::Mmap;
 
 pub enum JoinMethod {
     Concat,
@@ -32,14 +33,18 @@ pub struct Options {
 pub fn run(opts: Options) -> Result<()> {
     let job_pool = jobsteal::make_pool(opts.threads).unwrap();
 
+    let mmap_store = Vec::new();
     let inputs = opts.inputs.into_iter().map(|input| {
         let file = if opts.mmap {
-            Box::new(readers::mmap::open(input))
+            readers::mmap::open(input).map(|mmap| {
+                mmap_store.push(mmap);
+                Box::new(unsafe { mmap.as_slice() }.iter())
+            });
         } else {
-            Box::new(readers::file::open(input))
+            readers::file::open(input).map(Box::new)
         };
         file.chain_err(|| "Failed to open input file")
-            .unwrap_or_else(|e| iter::single(Err(e)));
+            .unwrap_or_else(|e| iter::once(Err(e)));
     });
 
     // TODO: multiple parser types
@@ -48,7 +53,7 @@ pub fn run(opts: Options) -> Result<()> {
     // TODO: maybe a segment based implementation?
     let counts = Mutex::new(vec![]);
     let error = Mutex::new(None);
-    pool.scope(|scope| {
+    job_pool.scope(|scope| {
         for input in inputs {
             scope.submit(move || {
                 let kmers = get_kmers::Kmers::new(input, opts.kmer_len.clone());
@@ -85,7 +90,7 @@ pub fn run(opts: Options) -> Result<()> {
     info!("Done sorting k-mers");
 
     let stdout = io::stdout();
-    output_counts::output(job_pool, stdout.lock());
+    output_counts::output(job_pool, stdout.lock(), counts, opts.kmer_len, opts.min_count);
     info!("Done!");
     Ok(())
 }

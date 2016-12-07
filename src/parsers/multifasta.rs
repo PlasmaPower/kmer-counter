@@ -1,4 +1,4 @@
-use errors;
+use errors::*;
 use nucleotide::Nucleotide;
 
 pub struct Section<'a, T> {
@@ -6,7 +6,7 @@ pub struct Section<'a, T> {
     done: bool,
 }
 
-impl<T: Iterator<Item = Result<u8>>> Iterator for Section<T> {
+impl<'a, T: Iterator<Item = Result<u8>>> Iterator for Section<'a, T> {
     type Item = Result<Nucleotide>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -45,8 +45,8 @@ impl<T: Iterator<Item = Result<u8>>> SectionReader<T> {
     }
 }
 
-impl<T: Iterator<Item = u8>> Iterator for SectionReader<T> {
-    type Item = Result<&mut Section<T>>;
+impl<'a, T: Iterator<Item = u8>> Iterator for SectionReader<T> {
+    type Item = Result<Section<'a, T>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
