@@ -5,6 +5,10 @@ use std::sync::Mutex;
 
 use errors::*;
 use count;
+use output_counts;
+
+use readers;
+use parsers;
 
 use memmap;
 use memmap::Mmap;
@@ -26,50 +30,23 @@ pub struct Options {
 }
 
 pub fn run(opts: Options) -> Result<()> {
-    let pool = jobsteal::make_pool(opts.threads).unwrap();
+    let job_pool = jobsteal::make_pool(opts.threads).unwrap();
 
-    // TODO: use files API
-    let input_mmap = try!(Mmap::open_path(opts.input, memmap::Protection::Read)
-        .chain_err(|| "Failed to open input file as a memory map"));
-    let input_slice = unsafe { input_mmap.as_slice() };
+    // TODO: multiple input files
+    let input = try!(readers::mmap::open(opts.input).map(Box::new).or_else(|e| {
+        error!("Failed to open memory map, trying regular file reading");
+        error!("{}", e);
+        Box::new(readers::file::open(opts.input))
+    }).chain_err(|| "Failed to open input file"));
     info!("Input file opened");
 
-    // TODO: rewrite here to jobsteal
-    let counts = run_counts::run_counts(input_slice, &count_opts);
+    let parser = parsers::multifasta::SectionReader::new(input)
 
+    // TODO: rewrite here to jobsteal (per input not section), parser
+    let counts = run_counts::run_counts(input_slice, &count_opts);
     info!("Done counting {} k-mers", counts.len());
-    let kmer_len = opts.kmer_len as usize;
+
     let stdout = io::stdout();
-    let mut stdout = Mutex::new(BufWriter::new(stdout.lock()));
-    pool.scope(|scope| {
-        for (kmer, count) in counts.filter_map(|n| n) {
-            if count < opts.min_count {
-                continue;
-            }
-            scope.submit(move || {
-                let mut kmer_str = vec![b'0'; kmer_len + 1];
-                kmer_str[kmer_len] = b'\t';
-                for i in (0..kmer_len).rev() {
-                    let nucleotide = Nucleotide::from(kmer & 0xff);
-                    let chr = nucleotide.to_text_byte();
-                    kmer_str[i] = chr;
-                    kmer = kmer >> 2;
-                }
-                let mut stdout = stdout.lock();
-                stdout.write(kmer_str.as_slice())
-                    .and_then(|_| stdout.write(count.to_string().as_bytes()))
-                    .and_then(|_| stdout.write(b"\n"))
-                    .chain_err(|| "Failed to write k-mer to stdout")
-                    .unwrap();
-            })
-        }
-    });
-    for (kmer_str, count) in output_list {
-        try!(stdout.write(kmer_str.as_slice())
-            .and_then(|_| stdout.write(count.to_string().as_bytes()))
-            .and_then(|_| stdout.write(b"\n"))
-            .chain_err(|| "Failed to write k-mer to stdout"));
-    }
-    info!("Done outputting");
+    output_counts::output(job_pool, stdout.lock());
     Ok(())
 }
