@@ -26,15 +26,14 @@ pub struct Options {
     pub min_count: u16,
     pub only_presence: bool,
     pub threads: usize,
-    // TODO:
-    pub join_methods: Vec<JoinMethod>,
+    pub mmap: bool,
 }
 
 pub fn run(opts: Options) -> Result<()> {
     let job_pool = jobsteal::make_pool(opts.threads).unwrap();
 
     let inputs = opts.inputs.into_iter().map(|input| {
-        let file = if opts.mmap {
+        let file: Result<Box<Iterator<Item = Result<u8>>>> = if opts.mmap {
             readers::mmap::open(input).map(|it| Box::new(it.map(Ok)))
         } else {
             readers::file::open(input).map(Box::new)

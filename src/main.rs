@@ -71,11 +71,6 @@ fn main() {
              .long("min-count")
              .default_value("1")
              .help("The minimum count to be outputted"))
-        .arg(clap::Arg::with_name("join_methods")
-             .multiple(true)
-             .value_name("METHODS...")
-             .possible_values(&["concat", "sort"])
-             .help("The methods (from lowest level to highest level) used to join kmer lists together"))
          .get_matches();
 
     let inputs = args.values_of("input").unwrap().collect::<Vec<_>>();
@@ -115,24 +110,14 @@ fn main() {
             error!("{}", e);
             exit(1);
         });
-    let only_presence = args.is_present("only_presence");
-
-    let join_methods = args.values_of("join_methods").unwrap().map(|m| match m {
-        "concat" => runner::JoinMethod::Concat,
-        "sort" => runner::JoinMethod::Sort,
-        method @ _ => {
-            error!("Unknown join method {}", method);
-            exit(1);
-        }
-    }).collect::<Vec<_>>();
 
     let runner_opts = runner::Options {
         inputs: inputs,
         kmer_len: KmerLength::new(kmer_len),
         min_count: min_count,
-        only_presence: only_presence,
+        only_presence: args.is_present("only_presence"),
         threads: threads,
-        join_methods: join_methods,
+        mmap: args.is_present("mmap"),
     };
     info!("Argument parsing complete");
     if let Err(ref e) = runner::run(runner_opts) {

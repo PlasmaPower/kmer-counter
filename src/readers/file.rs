@@ -21,5 +21,5 @@ pub fn open(path: String) -> Result<FileIterator> {
     let file = try!(File::open(path).chain_err(|| "Failed to open input file"));
     info!("Opened file: {}", path);
     let reader = BufReader::new(file);
-    Ok(reader.bytes().map(|r| r.expect("")))
+    Ok(reader.bytes().chain_err("Error reading input file"))
 }
