@@ -6,47 +6,61 @@ use jobsteal::Pool;
 use jobsteal::Spawner;
 
 trait Joiner {
+    type NewJoiner: Joiner;
+
     fn is_parallel() -> bool;
     fn join<A, RA, B, RB>(&self, oper_a: A, oper_b: B) -> (RA, RB)
-        where A: FnOnce() -> RA + Send,
-              B: FnOnce() -> RB + Send,
+        where A: FnOnce(Self::NewJoiner) -> RA + Send,
+              B: FnOnce(Self::NewJoiner) -> RB + Send,
               RA: Send,
-              RB: Send;
+              RB: Send,
+              Self: Sized;
 }
 
-struct Parallel<'a> {
-    spawner: &'a Spawner<'a, 'static>,
+struct Parallel<'s, 'p: 's> {
+    spawner: &'s Spawner<'p, 's>,
 }
 
-impl<'a> Joiner for Parallel<'a> {
+impl<'s, 'p, 'n> Joiner for Parallel<'s, 'p> {
+    type NewJoiner = Parallel<'s, 'n>;
+
     #[inline]
     fn is_parallel() -> bool {
         true
     }
     #[inline]
     fn join<A, RA, B, RB>(&self, oper_a: A, oper_b: B) -> (RA, RB)
-        where A: FnOnce() -> RA + Send,
-              B: FnOnce() -> RB + Send,
+        where A: FnOnce(Parallel<'s, 'n>) -> RA + Send,
+              B: FnOnce(Parallel<'s, 'n>) -> RB + Send,
               RA: Send,
               RB: Send
     {
-        self.spawner.join(oper_a, oper_b)
+        self.spawner.join(|s| {
+                              let joiner = Parallel { spawner: s };
+                              oper_a(joiner)
+                          },
+                          |s| {
+                              let joiner = Parallel { spawner: s };
+                              oper_b(joiner)
+                          })
     }
 }
 
 struct Sequential;
 impl Joiner for Sequential {
+    type NewJoiner = Sequential;
+
     #[inline]
     fn is_parallel() -> bool {
         false
     }
     #[inline]
     fn join<A, RA, B, RB>(&self, oper_a: A, oper_b: B) -> (RA, RB)
-        where A: FnOnce() -> RA,
-              B: FnOnce() -> RB
+        where A: FnOnce(Self) -> RA,
+              B: FnOnce(Self) -> RB
     {
-        let a = oper_a();
-        let b = oper_b();
+        let a = oper_a(Sequential {});
+        let b = oper_b(Sequential {});
         (a, b)
     }
 }
@@ -68,8 +82,8 @@ fn quick_sort<J: Joiner,
 
     let split_point = partition(v, merge_dups);
     let (lo, hi) = v.split_at_mut(split_point);
-    joiner.join(|| quick_sort(lo, merge_dups, joiner),
-                || quick_sort(hi, merge_dups, joiner));
+    joiner.join(|j| quick_sort(lo, merge_dups, j),
+                |j| quick_sort(hi, merge_dups, j));
 }
 
 pub fn sort<K: Ord + Clone + Send + Debug,
