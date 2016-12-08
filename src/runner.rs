@@ -33,17 +33,17 @@ pub fn run(opts: Options) -> Result<()> {
     let job_pool = jobsteal::make_pool(opts.threads).unwrap();
 
     let inputs = opts.inputs.into_iter().map(|input| {
-        let file: Result<Box<Iterator<Item = Result<u8>>>> = if opts.mmap {
-            readers::mmap::open(input).map(|it| Box::new(it.map(Ok)))
+        let file = if opts.mmap {
+            readers::mmap::open(input).map(|it| Box::new(it.map(Ok)) as Box<Iterator<Item = Result<u8>>>)
         } else {
-            readers::file::open(input).map(Box::new)
+            readers::file::open(input).map(|it| Box::new(it) as Box<Iterator<Item = Result<u8>>>)
         };
         file.chain_err(|| "Failed to open input file")
-            .unwrap_or_else(|e| iter::once(Err(e)));
+            .unwrap_or_else(|e| Box::new(iter::once(Err(e)) as Box<Iterator<Item = Result<u8>>>))
     });
 
     // TODO: multiple parser types
-    let parsers = inputs.map(parsers::multifasta::SectionReader::new);
+    let inputs = inputs.map(parsers::multifasta::SectionReader::new);
 
     // TODO: maybe a segment based implementation?
     let counts = Mutex::new(vec![]);
