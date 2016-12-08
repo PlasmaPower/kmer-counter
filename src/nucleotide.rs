@@ -7,7 +7,7 @@ pub enum Nucleotide {
 }
 
 impl Nucleotide {
-    pub fn into_text_byte(self) -> u8 {
+    pub fn as_text_byte(self) -> u8 {
         match self {
             Nucleotide::A => b'A',
             Nucleotide::C => b'C',
