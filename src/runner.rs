@@ -27,6 +27,8 @@ pub struct Options {
     pub only_presence: bool,
     pub threads: usize,
     pub mmap: bool,
+    // TODO:
+    pub join_methods: Vec<JoinMethod>,
 }
 
 pub fn run(opts: Options) -> Result<()> {
