@@ -9,7 +9,7 @@ use jobsteal;
 use errors::*;
 use kmer_length::KmerLength;
 use sort::sort;
-use get_kmers;
+use get_kmers::GetKmers;
 use output_counts;
 use kmer_tree;
 
@@ -33,7 +33,8 @@ pub fn run(opts: Options) -> Result<()> {
 
     let inputs = opts.inputs.into_iter().map(|input| {
         let file = if opts.mmap {
-            readers::mmap::open(input).map(|it| Box::new(it.map(Ok)) as Box<Iterator<Item = Result<u8>>>)
+            readers::mmap::open(input)
+                .map(|it| Box::new(it.map(Ok)) as Box<Iterator<Item = Result<u8>>>)
         } else {
             readers::file::open(input).map(|it| Box::new(it) as Box<Iterator<Item = Result<u8>>>)
         };
@@ -44,38 +45,48 @@ pub fn run(opts: Options) -> Result<()> {
     // TODO: multiple parser types
     let inputs = inputs.map(parsers::multifasta::SectionReader::new);
 
-    // TODO: maybe a segment based implementation?
-    let counts = Mutex::new(vec![]);
     let error = Mutex::new(None);
+    let input_counts = Mutex::new(Ok(Vec::new()));
     job_pool.scope(|scope| {
         for input in inputs {
-            scope.submit(move || {
-                let kmers = get_kmers::Kmers::new(input, opts.kmer_len.clone());
-                let items = kmers.map(|k| {
-                    match k {
+            scope::spawn(move || {
+                let section_counts = Ok(Vec::new());
+                for section in input {
+                    let kmers = GetKmers::new(section, kmer_len.clone())
+                        .map(|r| r.map(|n| Some((n, 1))))
+                        .collect::<Result<Vec<_>>>()
+                        .map(|v| {
+                            kmer_tree::Node::Leaf(kmer_tree::Leaf {
+                                counts: v,
+                                sorted: false,
+                            })
+                        });
+                    match kmers {
                         Err(e) => {
-                            error.lock().unwrap() = e;
-                            // None stops as iter is fused
-                            None
-                        },
-                        Ok(k) => {
-                            Some((k, 1))
+                            section_counts = Err(e);
+                            break;
+                        }
+                        Ok(vec) => {
+                            section_counts = section_counts.map(|list| list.push(vec));
                         }
                     }
-                }).fuse();
-                for item in items {
-                    counts.lock().push(item);
+                }
+                let section_counts = section_counts.map(kmer_tree::Node::Branch);
+                let input_counts = input_counts.lock().unwrap();
+                match section_counts {
+                    Err(e) => input_counts = Err(e),
+                    Ok(vec) => {
+                        input_counts = input_counts.map(|list| list.push(vec));
+                    }
                 }
             });
         }
     });
-    let error = try!(error.into_inner().chain_err(|| "Who knew it could go this wrong: error mutex poisoned"));
-    if let Some(e) = error {
-        return Err(e);
-    }
+    let counts = try!(input_counts.lock().chain_err(|| "A k-mer counting thread panicked, poisoning the output mutex"));
+    let counts = try!(counts.chain_err(|| "Encountered an error during k-mer counting"));
+    // TODO: into kmer_tree::Node::Branch, then cosolidate
     info!("Done counting {} k-mers", counts.len());
 
-    let counts = try!(counts.into_inner().chain_err(|| "A k-mer counting thread panicked"));
     if opts.only_presence {
         sort(counts.as_mut_slice(), |_, _, _| {})
     } else {
@@ -84,7 +95,11 @@ pub fn run(opts: Options) -> Result<()> {
     info!("Done sorting k-mers");
 
     let stdout = io::stdout();
-    output_counts::output(job_pool, stdout.lock(), counts, opts.kmer_len, opts.min_count);
+    output_counts::output(job_pool,
+                          stdout.lock(),
+                          counts,
+                          opts.kmer_len,
+                          opts.min_count);
     info!("Done!");
     Ok(())
 }

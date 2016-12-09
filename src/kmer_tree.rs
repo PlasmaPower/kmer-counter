@@ -14,7 +14,7 @@ pub enum JoinMethod {
 
 pub struct Leaf {
     pub counts: Vec<Option<(u64, u16)>>,
-    sorted: bool,
+    pub sorted: bool,
 }
 
 struct SortingQueueItem<'a> {
