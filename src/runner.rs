@@ -2,6 +2,7 @@ use std::io;
 use std::io::Write;
 use std::io::BufWriter;
 use std::sync::Mutex;
+use std::error::Error as ErrorTrait;
 use std::iter;
 
 use jobsteal;
@@ -9,7 +10,8 @@ use jobsteal;
 use errors::*;
 use kmer_length::KmerLength;
 use sort::sort;
-use get_kmers::GetKmers;
+use error_str::ErrorStr;
+use get_kmers;
 use output_counts;
 use kmer_tree;
 
@@ -49,42 +51,49 @@ pub fn run(opts: Options) -> Result<()> {
     let input_counts = Mutex::new(Ok(Vec::new()));
     job_pool.scope(|scope| {
         for input in inputs {
-            scope::spawn(move || {
+            scope.submit(move || {
                 let section_counts = Ok(Vec::new());
                 for section in input {
-                    let kmers = GetKmers::new(section, kmer_len.clone())
-                        .map(|r| r.map(|n| Some((n, 1))))
-                        .collect::<Result<Vec<_>>>()
-                        .map(|v| {
-                            kmer_tree::Node::Leaf(kmer_tree::Leaf {
-                                counts: v,
-                                sorted: false,
+                    let kmers =
+                        section.and_then(|section| {
+                                get_kmers::Kmers::new(section, opts.kmer_len.clone())
                             })
-                        });
+                            .and_then(|kmer_iter| {
+                                kmer_iter.map(|r| r.map(|n| Some((n, 1))))
+                                    .collect::<Result<Vec<_>>>()
+                            })
+                            .map(|v| {
+                                kmer_tree::Node::Leaf(kmer_tree::Leaf {
+                                    counts: v,
+                                    sorted: false,
+                                })
+                            });
                     match kmers {
                         Err(e) => {
                             section_counts = Err(e);
                             break;
                         }
                         Ok(vec) => {
-                            section_counts = section_counts.map(|list| list.push(vec));
+                            section_counts.map(|list| list.push(vec));
                         }
                     }
                 }
                 let section_counts = section_counts.map(kmer_tree::Node::Branch);
                 let input_counts = input_counts.lock().unwrap();
                 match section_counts {
-                    Err(e) => input_counts = Err(e),
+                    Err(e) => *input_counts = Err(e),
                     Ok(vec) => {
-                        input_counts = input_counts.map(|list| list.push(vec));
+                        input_counts.map(|list| list.push(vec));
                     }
                 }
             });
         }
     });
-    let counts = try!(input_counts.lock().chain_err(|| "A k-mer counting thread panicked, poisoning the output mutex"));
+    let counts = try!(input_counts.lock()
+        .map_err(|e| ErrorStr::new(e.description())) // e is not Sync
+        .chain_err(|| "A k-mer counting thread panicked, poisoning the output mutex"));
     let counts = try!(counts.chain_err(|| "Encountered an error during k-mer counting"));
-    // TODO: into kmer_tree::Node::Branch, then cosolidate
+    let counts = kmer_tree::Node::Branch(counts).consolidate().counts;
     info!("Done counting {} k-mers", counts.len());
 
     if opts.only_presence {

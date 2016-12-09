@@ -24,6 +24,7 @@ mod nucleotide;
 mod kmer_length;
 mod get_kmers;
 mod kmer_tree;
+mod error_str;
 mod sort;
 mod output_counts;
 mod runner;

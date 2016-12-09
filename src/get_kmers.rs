@@ -9,23 +9,24 @@ pub struct Kmers<T> {
 }
 
 impl<T: Iterator<Item = Result<Nucleotide>>> Kmers<T> {
-    pub fn new(input: T, kmer_len: KmerLength) -> Option<Result<Kmers<T>>> {
+    pub fn new(input: T, kmer_len: KmerLength) -> Result<Kmers<T>> {
         let buffer = 0u64;
-        for _ in 0..kmer_len.length() {
+        for _ in 0..(kmer_len.length() - 1) {
             match input.next() {
                 Some(Ok(n)) => {
                     let n: u8 = n.into();
                     buffer = n as u64 + (buffer << 2)
                 },
-                Some(Err(e)) => return Some(Err(e)),
-                None => return None,
+                Some(Err(e)) => return Err(e),
+                // The iterator will just return nothing:
+                None => break,
             }
         }
-        Some(Ok(Kmers {
+        Ok(Kmers {
             input: input,
             kmer_len: kmer_len,
             buffer: buffer,
-        }))
+        })
     }
 }
 

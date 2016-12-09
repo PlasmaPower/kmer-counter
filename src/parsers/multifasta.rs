@@ -48,7 +48,7 @@ impl<'a, T: Iterator<Item = Result<u8>>> SectionReader<'a, T> {
     }
 }
 
-impl<'a, T: Iterator<Item = u8>> Iterator for SectionReader<'a, T> {
+impl<'a, T: Iterator<Item = Result<u8>>> Iterator for SectionReader<'a, T> {
     type Item = Result<Section<'a, T>>;
 
     fn next(&mut self) -> Option<Self::Item> {
