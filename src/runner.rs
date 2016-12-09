@@ -92,9 +92,17 @@ pub fn run(opts: Options) -> Result<()> {
     let counts = try!(input_counts.lock()
         .map_err(|e| ErrorStr::new(e.description())) // e is not Sync
         .chain_err(|| "A k-mer counting thread panicked, poisoning the output mutex"));
-    let counts = try!(counts.chain_err(|| "Encountered an error during k-mer counting"));
-    let counts = kmer_tree::Node::Branch(counts).consolidate().counts;
+    let mut counts = try!(counts.chain_err(|| "Encountered an error during k-mer counting"));
     info!("Done counting {} k-mers", counts.len());
+
+    job_pool.scope(|scope| {
+        if opts.only_presence {
+            counts = kmer_tree::Node::Branch(counts).consolidate(scope, opts.join_method, |_, _, _| {}).counts;
+        } else {
+            counts = kmer_tree::Node::Branch(counts).consolidate(scope, opts.join_method, |_, value, other| *value += other).counts;
+        };
+    });
+    info!("Done consolidating {} k-mers", counts.len());
 
     if opts.only_presence {
         sort(counts.as_mut_slice(), |_, _, _| {})
