@@ -99,7 +99,7 @@ impl Node {
             Node::Leaf(leaf) => return leaf,
             Node::Branch(children) => children,
         };
-        let join_method = join_methods.pop();
+        let join_method = join_methods.pop().unwrap_or(JoinMethod::Sort);
         let children = children.into_iter().map(|n| n.consolidate(spawner, join_methods.clone(), merge_dups));
         match join_method {
             Concat => {

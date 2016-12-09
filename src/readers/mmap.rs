@@ -23,7 +23,7 @@ impl<'a> Iterator for Iter<'a> {
     type Item = u8;
 
     fn next(&mut self) -> Option<u8> {
-        self.iter.next()
+        self.iter.next().map(|n| *n)
     }
 }
 
@@ -31,5 +31,5 @@ pub fn open<'a>(path: String) -> Result<Iter<'a>> {
     let mmap = try!(Mmap::open_path(path, memmap::Protection::Read)
         .chain_err(|| "Failed to open input file as a memory map"));
     debug!("Opened file with mmap: {}", path);
-    Ok(Iter::new(mmap));
+    Ok(Iter::new(mmap))
 }

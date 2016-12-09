@@ -36,12 +36,12 @@ pub fn run(opts: Options) -> Result<()> {
     let inputs = opts.inputs.into_iter().map(|input| {
         let file = if opts.mmap {
             readers::mmap::open(input)
-                .map(|it| Box::new(it.map(Ok)) as Box<Iterator<Item = Result<u8>>>)
+                .map(|it| Box::new(it.map(Ok)) as Box<Iterator<Item = Result<u8>> + Send + Sync>)
         } else {
-            readers::file::open(input).map(|it| Box::new(it) as Box<Iterator<Item = Result<u8>>>)
+            readers::file::open(input).map(|it| Box::new(it) as Box<Iterator<Item = Result<u8>> + Send + Sync>)
         };
         file.chain_err(|| "Failed to open input file")
-            .unwrap_or_else(|e| Box::new(iter::once(Err(e)) as Box<Iterator<Item = Result<u8>>>))
+            .unwrap_or_else(|e| Box::new(iter::once(Err(e))) as Box<Iterator<Item = Result<u8>> + Send + Sync>)
     });
 
     // TODO: multiple parser types
@@ -95,25 +95,20 @@ pub fn run(opts: Options) -> Result<()> {
     let mut counts = try!(counts.chain_err(|| "Encountered an error during k-mer counting"));
     info!("Done counting {} k-mers", counts.len());
 
+    let all_counts = None;
     job_pool.scope(|scope| {
         if opts.only_presence {
-            counts = kmer_tree::Node::Branch(counts).consolidate(scope, opts.join_method, |_, _, _| {}).counts;
+            all_counts = Some(kmer_tree::Node::Branch(counts).consolidate(scope, opts.join_methods, &|_, _, _| {}).counts);
         } else {
-            counts = kmer_tree::Node::Branch(counts).consolidate(scope, opts.join_method, |_, value, other| *value += other).counts;
+            all_counts = Some(kmer_tree::Node::Branch(counts).consolidate(scope, opts.join_methods, &|_, value, other| *value += other).counts);
         };
     });
+    let counts = all_counts.unwrap();
     info!("Done consolidating {} k-mers", counts.len());
-
-    if opts.only_presence {
-        sort(counts.as_mut_slice(), |_, _, _| {})
-    } else {
-        sort(counts.as_mut_slice(), |_, value, other| *value += other)
-    };
-    info!("Done sorting k-mers");
 
     let stdout = io::stdout();
     output_counts::output(job_pool,
-                          stdout.lock(),
+                          stdout,
                           counts,
                           opts.kmer_len,
                           opts.min_count);
