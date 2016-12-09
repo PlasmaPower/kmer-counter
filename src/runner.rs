@@ -11,15 +11,12 @@ use kmer_length::KmerLength;
 use sort::sort;
 use get_kmers;
 use output_counts;
+use kmer_tree;
 
 use readers;
 use parsers;
 
-pub enum JoinMethod {
-    Concat,
-    Sort,
-}
-
+/// The list of options for the runner
 pub struct Options {
     pub inputs: Vec<String>,
     pub kmer_len: KmerLength,
@@ -27,8 +24,8 @@ pub struct Options {
     pub only_presence: bool,
     pub threads: usize,
     pub mmap: bool,
-    // TODO:
-    pub join_methods: Vec<JoinMethod>,
+    /// Sorted from highest depth to lowest depth
+    pub join_methods: Vec<kmer_tree::JoinMethod>,
 }
 
 pub fn run(opts: Options) -> Result<()> {
@@ -54,18 +51,18 @@ pub fn run(opts: Options) -> Result<()> {
         for input in inputs {
             scope.submit(move || {
                 let kmers = get_kmers::Kmers::new(input, opts.kmer_len.clone());
-                let items = kmers.filter_map(|k| {
-                    // return None == stop
+                let items = kmers.map(|k| {
                     match k {
                         Err(e) => {
                             error.lock().unwrap() = e;
+                            // None stops as iter is fused
                             None
                         },
                         Ok(k) => {
-                            Some(Some((k, 1)))
+                            Some((k, 1))
                         }
                     }
-                }).fold();
+                }).fuse();
                 for item in items {
                     counts.lock().push(item);
                 }

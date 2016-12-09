@@ -23,6 +23,7 @@ mod errors {
 mod nucleotide;
 mod kmer_length;
 mod get_kmers;
+mod kmer_tree;
 mod sort;
 mod output_counts;
 mod runner;
@@ -75,8 +76,8 @@ fn main() {
              .multiple(true)
              .value_name("METHODS...")
              .possible_values(&["concat", "sort"])
-             .help("The methods (from lowest level to highest level) used to join kmer lists together"))
-         .get_matches();
+             .help("The methods sorted by depth used to join kmer lists together, defaults to sort"))
+        .get_matches();
 
     let inputs = args.values_of("input").unwrap().collect::<Vec<_>>();
 
@@ -84,7 +85,7 @@ fn main() {
         .unwrap()
         .parse::<usize>()
         .unwrap_or_else(|e| {
-            error!("Failed to parse thread count as a positive integer");
+            error!("Failed to parse thread count as a positive integer:");
             error!("{}", e);
             exit(1);
         });
@@ -93,12 +94,12 @@ fn main() {
         .unwrap()
         .parse::<u8>()
         .unwrap_or_else(|e| {
-            error!("Failed to parse k-mer length as a positive integer");
+            error!("Failed to parse k-mer length as a positive integer:");
             error!("{}", e);
             exit(1);
         });
-    if kmer_len == 0 {
-        error!("Kmer length cannot be 0");
+    if kmer_len < 1 {
+        error!("Kmer length must be at least 1");
         exit(1);
     }
     if kmer_len > 32 {
@@ -111,18 +112,18 @@ fn main() {
         .unwrap()
         .parse::<u16>()
         .unwrap_or_else(|e| {
-            error!("Failed to parse minimum count as a positive integer");
+            error!("Failed to parse minimum count as a positive integer:");
             error!("{}", e);
             exit(1);
         });
     let join_methods = args.values_of("join_methods").unwrap().map(|m| match m {
-        "concat" => runner::JoinMethod::Concat,
-        "sort" => runner::JoinMethod::Sort,
+        "concat" => kmer_tree::JoinMethod::Concat,
+        "sort" => kmer_tree::JoinMethod::Sort,
         method @ _ => {
             error!("Unknown join method {}", method);
             exit(1);
         }
-    }).collect::<Vec<_>>();
+    }).rev().collect::<Vec<_>>();
 
     let runner_opts = runner::Options {
         inputs: inputs,

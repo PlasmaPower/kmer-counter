@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 use std::fmt::Debug;
 
-use jobsteal::Pool;
 use jobsteal::Spawner;
 
 fn quick_sort<K: Ord + Clone + Send + Debug,
@@ -32,9 +31,8 @@ fn quick_sort<K: Ord + Clone + Send + Debug,
 
 pub fn sort<K: Ord + Clone + Send + Debug,
             V: Send + Debug,
-            F: Fn(&K, &mut V, V) + Sync>(v: &mut [Option<(K, V)>], merge_dups: F, pool: Pool) {
-    let spawner = pool.spawner();
-    quick_sort(v, &merge_dups, Some(&spawner))
+            F: Fn(&K, &mut V, V) + Sync>(v: &mut [Option<(K, V)>], merge_dups: F, spawner: &Spawner) {
+    quick_sort(v, &merge_dups, Some(spawner))
 }
 
 fn compare<K: Ord, V>(a: &Option<(K, V)>, b: &Option<(K, V)>) -> Ordering {
