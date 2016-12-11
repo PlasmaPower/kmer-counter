@@ -129,7 +129,7 @@ pub fn run(opts: Options) -> Result<()> {
     info!("Done consolidating {} k-mers", counts.len());
 
     let stdout = io::stdout();
-    output_counts::output(job_pool, stdout, counts, kmer_len, min_count);
+    output_counts::output(stdout.lock(), counts, kmer_len, min_count);
     info!("Done!");
     Ok(())
 }

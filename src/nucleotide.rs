@@ -27,7 +27,7 @@ impl Nucleotide {
     }
 
     pub fn from_lower_bits(b: u8) -> Nucleotide {
-        match b & 0xff {
+        match b & 0b11 {
             0 => Nucleotide::A,
             1 => Nucleotide::C,
             2 => Nucleotide::G,

@@ -28,12 +28,12 @@ fn quick_sort<K, V, F>(v: &mut [Option<(K, V)>], merge_dups: &F, spawner: Option
     }
 }
 
-pub fn sort<K, V, F>(v: &mut [Option<(K, V)>], merge_dups: F, spawner: &Spawner)
+pub fn sort<K, V, F>(v: &mut [Option<(K, V)>], merge_dups: F, spawner: Option<&Spawner>)
     where K: Ord + Clone + Send + Debug,
           V: Send + Debug,
           F: Fn(&K, &mut V, V) + Sync
 {
-    quick_sort(v, &merge_dups, Some(spawner))
+    quick_sort(v, &merge_dups, spawner)
 }
 
 fn compare<K: Ord, V>(a: &Option<(K, V)>, b: &Option<(K, V)>) -> Ordering {

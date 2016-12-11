@@ -56,8 +56,8 @@ fn main() {
         .arg(clap::Arg::with_name("threads")
              .short("t")
              .long("threads")
-             .default_value("4")
-             .help("The number of threads used"))
+             .default_value("0")
+             .help("The number of threads used, 0 will auto-optimize"))
         .arg(clap::Arg::with_name("mmap")
              .long("mmap")
              .help("Use memory maps instead of traditional file I/O"))
@@ -83,15 +83,17 @@ fn main() {
              .multiple(true)
              .require_delimiter(true)
              .value_name("METHODS...")
-             .possible_values(&["concat", "sort"])
+             .possible_values(&["concat", "join", "sort"])
              .help("The methods sorted by depth used to join kmer lists together, \
-                  defaults to sort. Comma separated."))
+                  defaults to concat. Comma separated. Note that concat does not add \
+                  duplicate counts, and join output ordering is random."))
         .get_matches();
 
     let inputs = args.values_of("inputs")
-        .unwrap()
-        .map(|s| s.to_string())
-        .collect::<Vec<_>>();
+        .map(|iter| {
+            iter.map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        }).unwrap_or_else(|| Vec::new());
 
     let threads = args.value_of("threads")
         .unwrap()
@@ -132,6 +134,7 @@ fn main() {
         .map(|iter| {
             iter.map(|m| match m {
                 "concat" => kmer_tree::JoinMethod::Concat,
+                "join" => kmer_tree::JoinMethod::Join,
                 "sort" => kmer_tree::JoinMethod::Sort,
                 method @ _ => {
                     error!("Unknown join method {}", method);

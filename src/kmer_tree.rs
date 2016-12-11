@@ -1,4 +1,5 @@
 use std::collections::BinaryHeap;
+use std::collections::HashMap;
 use std::cmp::Ordering;
 
 use jobsteal::Spawner;
@@ -8,6 +9,7 @@ use sort::sort;
 #[derive(PartialEq, Eq, Clone)]
 pub enum JoinMethod {
     Concat,
+    Join,
     Sort,
 }
 
@@ -20,6 +22,9 @@ struct SortingQueueItem {
     counts: Vec<Option<(u64, u16)>>,
     index: usize,
 }
+
+// TODO: future optimization by collapsing trees
+// e.g. no use in join -> sort, concat -> sort is quicker
 
 impl SortingQueueItem {
     fn new(counts: Vec<Option<(u64, u16)>>) -> SortingQueueItem {
@@ -103,8 +108,8 @@ impl Node {
             Node::Leaf(leaf) => return leaf,
             Node::Branch(children) => children,
         };
-        let sort_method = JoinMethod::Sort; // Extends lifetime
-        let join_methods_split = join_methods.split_first().unwrap_or((&sort_method, join_methods));
+        let default_sort_method = JoinMethod::Concat; // Extends lifetime
+        let join_methods_split = join_methods.split_first().unwrap_or((&default_sort_method, join_methods));
         let join_method = join_methods_split.0;
         let mut children = children.into_iter()
             .map(|n| n.consolidate(spawner, join_methods_split.1, merge_dups));
@@ -126,18 +131,37 @@ impl Node {
                     }
                 }
             }
+            JoinMethod::Join => {
+                let mut map = HashMap::new();
+                for child in children {
+                    for count in child.counts.into_iter().filter_map(|o| o) {
+                        *map.entry(count.0).or_insert(0) += count.1;
+                    }
+                }
+                Leaf {
+                    counts: map.into_iter().map(Some).collect(),
+                    sorted: false,
+                }
+            }
             JoinMethod::Sort => {
                 let mut output = Vec::new();
                 let mut sorting_queue = children.map(|n| {
                         let mut counts = n.counts;
                         if !n.sorted {
-                            sort(counts.as_mut_slice(), merge_dups, spawner);
+                            sort(counts.as_mut_slice(), merge_dups, Some(spawner));
                         }
                         SortingQueueItem::new(counts)
                     })
                     .collect::<BinaryHeap<_>>();
                 let mut next_count = sorting_queue.peek_mut().and_then(|mut item| item.pop_first());
+                let mut last = None;
                 while let Some((kmer, count)) = next_count.take() {
+                    if let Some(last) = last {
+                        if kmer < last {
+                            panic!("Encountered kmer {} after last {}", kmer, last);
+                        }
+                    }
+                    last = Some(kmer);
                     let mut count = count;
                     while let Some(mut item) = sorting_queue.peek_mut() {
                         if let Some(first) = item.pop_first() {
@@ -147,6 +171,8 @@ impl Node {
                                 next_count = Some(first);
                                 break;
                             }
+                        } else {
+                            break;
                         }
                     }
                     output.push(Some((kmer, count)));
