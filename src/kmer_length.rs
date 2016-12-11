@@ -1,5 +1,3 @@
-use std::ops::BitAnd;
-
 #[derive(Clone, Copy)]
 pub struct KmerLength {
     length: u8,
@@ -16,7 +14,7 @@ impl KmerLength {
         };
         KmerLength {
             length: length,
-            bitmask: bitmask
+            bitmask: bitmask,
         }
     }
 
@@ -26,7 +24,7 @@ impl KmerLength {
     }
 
     #[inline]
-    pub fn bitmask(&self) -> u64 { 
+    pub fn bitmask(&self) -> u64 {
         self.bitmask
     }
 }

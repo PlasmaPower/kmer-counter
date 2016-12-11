@@ -3,12 +3,11 @@ use std::fmt::Debug;
 
 use jobsteal::Spawner;
 
-fn quick_sort<K: Ord + Clone + Send + Debug,
-              V: Send + Debug,
-              F: Fn(&K, &mut V, V) + Sync>
-    (v: &mut [Option<(K, V)>],
-     merge_dups: &F,
-     spawner: Option<&Spawner>) {
+fn quick_sort<K, V, F>(v: &mut [Option<(K, V)>], merge_dups: &F, spawner: Option<&Spawner>)
+    where K: Ord + Clone + Send + Debug,
+          V: Send + Debug,
+          F: Fn(&K, &mut V, V) + Sync
+{
     if v.len() <= 1 {
         return;
     }
@@ -29,9 +28,11 @@ fn quick_sort<K: Ord + Clone + Send + Debug,
     }
 }
 
-pub fn sort<K: Ord + Clone + Send + Debug,
-            V: Send + Debug,
-            F: Fn(&K, &mut V, V) + Sync>(v: &mut [Option<(K, V)>], merge_dups: F, spawner: &Spawner) {
+pub fn sort<K, V, F>(v: &mut [Option<(K, V)>], merge_dups: F, spawner: &Spawner)
+    where K: Ord + Clone + Send + Debug,
+          V: Send + Debug,
+          F: Fn(&K, &mut V, V) + Sync
+{
     quick_sort(v, &merge_dups, Some(spawner))
 }
 

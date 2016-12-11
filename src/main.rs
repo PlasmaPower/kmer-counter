@@ -24,7 +24,7 @@ mod nucleotide;
 mod kmer_length;
 mod get_kmers;
 mod kmer_tree;
-mod error_str;
+mod error_string;
 mod sort;
 mod output_counts;
 mod runner;
@@ -45,42 +45,46 @@ fn main() {
         .author("Lee Bousfield <ljbousfield@gmail.com>")
         .about("Counts k-mers")
         .arg(clap::Arg::with_name("inputs")
-             .required(true)
-             .takes_value(true)
-             .value_name("INPUT...")
-             .help("The input FASTA files"))
+            .required(true)
+            .takes_value(true)
+            .value_name("INPUT...")
+            .help("The input FASTA files"))
         .arg(clap::Arg::with_name("threads")
-             .short("t")
-             .long("threads")
-             .default_value("4")
-             .help("The number of threads used"))
+            .short("t")
+            .long("threads")
+            .default_value("4")
+            .help("The number of threads used"))
         .arg(clap::Arg::with_name("mmap")
-             .long("mmap")
-             .help("Use memory maps instead of traditional file I/O"))
+            .long("mmap")
+            .help("Use memory maps instead of traditional file I/O"))
         .arg(clap::Arg::with_name("kmer_len")
-             .short("n")
-             .long("kmer-length")
-             .required(true)
-             .takes_value(true)
-             .value_name("LENGTH")
-             .help("The length of generated k-mers"))
+            .short("n")
+            .long("kmer-length")
+            .required(true)
+            .takes_value(true)
+            .value_name("LENGTH")
+            .help("The length of generated k-mers"))
         .arg(clap::Arg::with_name("only_presence")
-             .short("p")
-             .long("only-presence")
-             .help("If enabled, only outputs 1 instead of the count to the output file"))
+            .short("p")
+            .long("only-presence")
+            .help("If enabled, only outputs 1 instead of the count to the output file"))
         .arg(clap::Arg::with_name("min_count")
-             .short("c")
-             .long("min-count")
-             .default_value("1")
-             .help("The minimum count to be outputted"))
+            .short("c")
+            .long("min-count")
+            .default_value("1")
+            .help("The minimum count to be outputted"))
         .arg(clap::Arg::with_name("join_methods")
-             .multiple(true)
-             .value_name("METHODS...")
-             .possible_values(&["concat", "sort"])
-             .help("The methods sorted by depth used to join kmer lists together, defaults to sort"))
+            .multiple(true)
+            .value_name("METHODS...")
+            .possible_values(&["concat", "sort"])
+            .help("The methods sorted by depth used to join kmer lists together, \
+                  defaults to sort"))
         .get_matches();
 
-    let inputs = args.values_of("input").unwrap().collect::<Vec<_>>();
+    let inputs = args.values_of("input")
+        .unwrap()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>();
 
     let threads = args.value_of("threads")
         .unwrap()
@@ -117,14 +121,17 @@ fn main() {
             error!("{}", e);
             exit(1);
         });
-    let join_methods = args.values_of("join_methods").unwrap().map(|m| match m {
-        "concat" => kmer_tree::JoinMethod::Concat,
-        "sort" => kmer_tree::JoinMethod::Sort,
-        method @ _ => {
-            error!("Unknown join method {}", method);
-            exit(1);
-        }
-    }).rev().collect::<Vec<_>>();
+    let join_methods = args.values_of("join_methods")
+        .unwrap()
+        .map(|m| match m {
+            "concat" => kmer_tree::JoinMethod::Concat,
+            "sort" => kmer_tree::JoinMethod::Sort,
+            method @ _ => {
+                error!("Unknown join method {}", method);
+                exit(1);
+            }
+        })
+        .collect::<Vec<_>>();
 
     let runner_opts = runner::Options {
         inputs: inputs,

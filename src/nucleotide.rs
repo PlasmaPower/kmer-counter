@@ -25,6 +25,16 @@ impl Nucleotide {
             _ => None,
         }
     }
+
+    pub fn from_lower_bits(b: u8) -> Nucleotide {
+        match b & 0xff {
+            0 => Nucleotide::A,
+            1 => Nucleotide::C,
+            2 => Nucleotide::G,
+            3 => Nucleotide::T,
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl Into<u8> for Nucleotide {
@@ -38,19 +48,6 @@ impl Into<u8> for Nucleotide {
             Nucleotide::C => 1,
             Nucleotide::G => 2,
             Nucleotide::T => 3,
-        }
-    }
-}
-
-impl From<u8> for Nucleotide {
-    /// This function compiles down to a move.
-    #[inline]
-    fn from(num: u8) -> Nucleotide {
-        match num {
-            0 => Nucleotide::A,
-            1 => Nucleotide::C,
-            2 => Nucleotide::G,
-            3 => Nucleotide::T,
         }
     }
 }

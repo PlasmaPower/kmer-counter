@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use errors::*;
 use nucleotide::Nucleotide;
 
@@ -16,7 +14,10 @@ impl<'a, T: Iterator<Item = Result<u8>>> Iterator for Section<'a, T> {
             return None;
         }
         while let Some(c) = self.file.next() {
-            let c = try!(c);
+            let c = match c {
+                Ok(c) => c,
+                Err(e) => return Some(Err(e)),
+            };
             match c {
                 b' ' | b'\n' | b'\t' => continue,
                 b'>' => {
@@ -34,31 +35,33 @@ impl<'a, T: Iterator<Item = Result<u8>>> Iterator for Section<'a, T> {
                 }
             }
         }
+        None
     }
 }
 
-pub struct SectionReader<'a, T: 'a> {
+pub struct SectionReader<T> {
     file: T,
-    phantom: PhantomData<&'a T>,
 }
 
-impl<'a, T: Iterator<Item = Result<u8>>> SectionReader<'a, T> {
-    pub fn new(file: T) -> SectionReader<'a, T> {
-        SectionReader { file: file }
+impl<T: Iterator<Item = Result<u8>>> SectionReader<T> {
+    pub fn new(file: T) -> SectionReader<T> {
+        SectionReader {
+            file: file,
+        }
     }
-}
 
-impl<'a, T: Iterator<Item = Result<u8>>> Iterator for SectionReader<'a, T> {
-    type Item = Result<Section<'a, T>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
+    pub fn next_section<'a>(&'a mut self) -> Option<Result<Section<'a, T>>> {
         loop {
-            match try!(self.file.next()) {
+            match self.file.next() {
                 None => return None,
-                Some(b'\n') => break,
+                Some(Err(e)) => return Some(Err(e)),
+                Some(Ok(b'\n')) => break,
                 Some(_) => continue,
             }
         }
-        Some(Ok(Section { file: &mut self.file }))
+        Some(Ok(Section {
+            file: &mut self.file,
+            done: false,
+        }))
     }
 }

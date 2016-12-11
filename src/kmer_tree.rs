@@ -3,7 +3,6 @@ use std::cmp::Ordering;
 
 use jobsteal::Spawner;
 
-use errors::*;
 use sort::sort;
 
 #[derive(PartialEq, Eq, Clone)]
@@ -17,31 +16,36 @@ pub struct Leaf {
     pub sorted: bool,
 }
 
-struct SortingQueueItem<'a> {
-    counts: &'a [Option<(u64, u16)>],
+struct SortingQueueItem {
+    counts: Vec<Option<(u64, u16)>>,
+    index: usize,
 }
 
-impl<'a> SortingQueueItem<'a> {
-    fn first(&self) -> Option<(u64, u16)> {
-        self.counts.iter().filter_map(|o| *o).nth(0)
+impl SortingQueueItem {
+    fn new(counts: Vec<Option<(u64, u16)>>) -> SortingQueueItem {
+        SortingQueueItem {
+            counts: counts,
+            index: 0,
+        }
     }
 
-    fn pop_first(&mut self) -> Option<&mut (u64, u16)> {
-        loop {
-            if let Some((next, rest)) = self.counts.split_first_mut() {
-                self.counts = rest;
-                if next.is_some() {
-                    return next.as_mut();
-                }
-            } else {
-                return None;
+    fn first(&self) -> Option<&(u64, u16)> {
+        self.counts[self.index..].iter().filter_map(|o| o.as_ref()).nth(0)
+    }
+
+    fn pop_first(&mut self) -> Option<(u64, u16)> {
+        while let Some(mut count) = self.counts.get_mut(self.index) {
+            self.index += 1;
+            if count.is_some() {
+                return count.take();
             }
         }
+        None
     }
 }
 
 /// Impl simply for Ord impl
-impl<'a> PartialEq for SortingQueueItem<'a> {
+impl PartialEq for SortingQueueItem {
     fn eq(&self, other: &SortingQueueItem) -> bool {
         match self.first() {
             None => other.first().is_none(),
@@ -55,9 +59,9 @@ impl<'a> PartialEq for SortingQueueItem<'a> {
     }
 }
 
-impl<'a> Eq for SortingQueueItem<'a> {}
+impl Eq for SortingQueueItem {}
 
-impl<'a> Ord for SortingQueueItem<'a> {
+impl Ord for SortingQueueItem {
     fn cmp(&self, other: &SortingQueueItem) -> Ordering {
         match self.first() {
             None => {
@@ -76,7 +80,7 @@ impl<'a> Ord for SortingQueueItem<'a> {
     }
 }
 
-impl<'a> PartialOrd for SortingQueueItem<'a> {
+impl PartialOrd for SortingQueueItem {
     fn partial_cmp(&self, other: &SortingQueueItem) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -90,7 +94,7 @@ pub enum Node {
 impl Node {
     pub fn consolidate<F>(self,
                           spawner: &Spawner,
-                          join_methods: Vec<JoinMethod>,
+                          join_methods: &[JoinMethod],
                           merge_dups: &F)
                           -> Leaf
         where F: Fn(&u64, &mut u16, u16) + Sync
@@ -99,14 +103,17 @@ impl Node {
             Node::Leaf(leaf) => return leaf,
             Node::Branch(children) => children,
         };
-        let join_method = join_methods.pop().unwrap_or(JoinMethod::Sort);
-        let children = children.into_iter().map(|n| n.consolidate(spawner, join_methods.clone(), merge_dups));
-        match join_method {
-            Concat => {
+        let sort_method = JoinMethod::Sort; // Extends lifetime
+        let join_methods_split = join_methods.split_first().unwrap_or((&sort_method, join_methods));
+        let join_method = join_methods_split.0;
+        let mut children = children.into_iter()
+            .map(|n| n.consolidate(spawner, join_methods_split.1, merge_dups));
+        match *join_method {
+            JoinMethod::Concat => {
                 if let Some(first) = children.next() {
                     let children = children.map(|n| n.counts);
                     Leaf {
-                        counts: children.fold(first.counts, |mut a, b| {
+                        counts: children.fold(first.counts, |mut a, mut b| {
                             a.append(&mut b);
                             a
                         }),
@@ -119,19 +126,20 @@ impl Node {
                     }
                 }
             }
-            Sort => {
-                let output = Vec::new();
-                let sorting_queue = children.map(|n| {
-                        let counts = n.counts;
+            JoinMethod::Sort => {
+                let mut output = Vec::new();
+                let mut sorting_queue = children.map(|n| {
+                        let mut counts = n.counts;
                         if !n.sorted {
                             sort(counts.as_mut_slice(), merge_dups, spawner);
                         }
-                        SortingQueueItem { counts: counts.as_slice() }
+                        SortingQueueItem::new(counts)
                     })
                     .collect::<BinaryHeap<_>>();
-                let mut next_count = sorting_queue.peek_mut().and_then(|item| item.pop_first());
-                while let Some(&mut (kmer, mut count)) = next_count.take() {
-                    while let Some(item) = sorting_queue.peek_mut() {
+                let mut next_count = sorting_queue.peek_mut().and_then(|mut item| item.pop_first());
+                while let Some((kmer, count)) = next_count.take() {
+                    let mut count = count;
+                    while let Some(mut item) = sorting_queue.peek_mut() {
                         if let Some(first) = item.pop_first() {
                             if kmer == first.0 {
                                 merge_dups(&kmer, &mut count, first.1);

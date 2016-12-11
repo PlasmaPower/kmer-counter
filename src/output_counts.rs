@@ -8,7 +8,7 @@ use errors::*;
 use kmer_length::KmerLength;
 use nucleotide::Nucleotide;
 
-pub fn output<T>(pool: Pool,
+pub fn output<T>(mut pool: Pool,
                  stream: T,
                  counts: Vec<Option<(u64, u16)>>,
                  kmer_len: KmerLength,
@@ -16,9 +16,10 @@ pub fn output<T>(pool: Pool,
     where T: Write + Send
 {
     let stream = Mutex::new(BufWriter::new(stream));
+    let stream_ref = &stream;
     let kmer_len = kmer_len.length() as usize;
     pool.scope(|scope| {
-        for (kmer, count) in counts.into_iter().filter_map(|n| n) {
+        for (mut kmer, count) in counts.into_iter().filter_map(|n| n) {
             if count < min_count {
                 continue;
             }
@@ -26,12 +27,12 @@ pub fn output<T>(pool: Pool,
                 let mut kmer_str = vec![0; kmer_len + 1];
                 kmer_str[kmer_len] = b'\t';
                 for i in (0..kmer_len).rev() {
-                    let nucleotide = Nucleotide::from((kmer & 0xff) as u8);
+                    let nucleotide = Nucleotide::from_lower_bits(kmer as u8);
                     let chr = nucleotide.as_text_byte();
                     kmer_str[i] = chr;
                     kmer = kmer >> 2;
                 }
-                let mut stream = stream.lock().unwrap();
+                let mut stream = stream_ref.lock().unwrap();
                 stream.write(kmer_str.as_slice())
                     .and_then(|_| stream.write(count.to_string().as_bytes()))
                     .and_then(|_| stream.write(b"\n"))

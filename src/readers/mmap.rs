@@ -1,35 +1,54 @@
-use std::slice;
-
 use memmap;
 use memmap::Mmap;
 
 use errors::*;
 
-pub struct Iter<'a> {
+// Mmap is there simply for the Drop impl
+#[allow(dead_code)]
+pub struct Iter {
     mmap: Mmap,
-    iter: slice::Iter<'a, u8>,
+    ptr: *const u8,
+    end: *const u8,
 }
 
-impl<'a> Iter<'a> {
-    fn new(mmap: Mmap) -> Iter<'a> {
+impl Iter {
+    fn new(mmap: Mmap) -> Iter {
+        let ptr = mmap.ptr();
+        let len = mmap.len();
+        if len > ::std::isize::MAX as usize {
+            panic!("Tried to mmap file bigger than the maximum isize value");
+        }
+        let len = len as isize;
+        let end = unsafe { ptr.offset(len) };
         Iter {
             mmap: mmap,
-            iter: unsafe { mmap.as_slice() }.iter(),
+            ptr: ptr,
+            end: end,
         }
     }
 }
 
-impl<'a> Iterator for Iter<'a> {
+impl Iterator for Iter {
     type Item = u8;
 
     fn next(&mut self) -> Option<u8> {
-        self.iter.next().map(|n| *n)
+        if self.ptr == self.end {
+            None
+        } else {
+            unsafe {
+                let old = self.ptr;
+                self.ptr = self.ptr.offset(1);
+                Some(*old)
+            }
+        }
     }
 }
 
-pub fn open<'a>(path: String) -> Result<Iter<'a>> {
+unsafe impl Sync for Iter {}
+unsafe impl Send for Iter {}
+
+pub fn open(path: String) -> Result<Iter> {
     let mmap = try!(Mmap::open_path(path, memmap::Protection::Read)
         .chain_err(|| "Failed to open input file as a memory map"));
-    debug!("Opened file with mmap: {}", path);
     Ok(Iter::new(mmap))
 }
