@@ -1,4 +1,5 @@
 use std::io;
+use std::io::Read;
 use std::sync::Mutex;
 use std::error::Error as ErrorTrait;
 
@@ -17,6 +18,7 @@ use parsers;
 /// The list of options for the runner
 pub struct Options {
     pub inputs: Vec<String>,
+    pub stdin: bool,
     pub kmer_len: KmerLength,
     pub min_count: u16,
     pub only_presence: bool,
@@ -28,6 +30,7 @@ pub struct Options {
 pub fn run(opts: Options) -> Result<()> {
     let Options {
         inputs,
+        stdin,
         kmer_len,
         min_count,
         only_presence,
@@ -37,19 +40,26 @@ pub fn run(opts: Options) -> Result<()> {
     } = opts;
     let mut job_pool = jobsteal::make_pool(threads).unwrap();
 
-    let inputs = try!(inputs
-                      .into_iter()
-                      .map(|input| {
-                          if mmap {
-                              readers::mmap::open(input).map(|it| {
-                                  Box::new(it.map(Ok)) as Box<Iterator<Item = Result<u8>> + Send + Sync>
-                              })
-                          } else {
-                              readers::file::open(input)
-                                  .map(|it| Box::new(it) as Box<Iterator<Item = Result<u8>> + Send + Sync>)
-                          }
-                      })
-                      .collect::<Result<Vec<_>>>());
+    let stdin_handle = io::stdin();
+
+    let mut inputs = try!(inputs.into_iter()
+        .map(|input| {
+            if mmap {
+                readers::mmap::open(input).map(|it| {
+                        Box::new(it.map(Ok)) as Box<Iterator<Item = Result<u8>> + Send + Sync>
+                    })
+            } else {
+                readers::file::open(input)
+                    .map(|it| Box::new(it) as Box<Iterator<Item = Result<u8>> + Send + Sync>)
+            }
+        })
+        .collect::<Result<Vec<_>>>());
+
+    if stdin {
+        inputs.push(Box::new(stdin_handle.bytes()
+                             .map(|r| r.chain_err(|| "Failed to read from stdin")))
+                    as Box<Iterator<Item = Result<u8>> + Send + Sync>);
+    }
 
     // TODO: multiple parser types
     let inputs = inputs.into_iter().map(parsers::multifasta::SectionReader::new);
@@ -62,19 +72,17 @@ pub fn run(opts: Options) -> Result<()> {
                 let mut section_counts = Ok(Vec::new());
                 while let Some(section) = input.next_section() {
                     let kmers =
-                        section.and_then(|section| {
-                            get_kmers::Kmers::new(section, kmer_len.clone())
-                        })
-                    .and_then(|kmer_iter| {
-                        kmer_iter.map(|r| r.map(|n| Some((n, 1))))
-                            .collect::<Result<Vec<_>>>()
-                    })
-                    .map(|v| {
-                        kmer_tree::Node::Leaf(kmer_tree::Leaf {
-                            counts: v,
-                            sorted: false,
-                        })
-                    });
+                        section.and_then(|section| get_kmers::Kmers::new(section, kmer_len.clone()))
+                            .and_then(|kmer_iter| {
+                                kmer_iter.map(|r| r.map(|n| Some((n, 1))))
+                                    .collect::<Result<Vec<_>>>()
+                            })
+                            .map(|v| {
+                                kmer_tree::Node::Leaf(kmer_tree::Leaf {
+                                    counts: v,
+                                    sorted: false,
+                                })
+                            });
                     match kmers {
                         Err(e) => {
                             section_counts = Err(e);
@@ -109,12 +117,12 @@ pub fn run(opts: Options) -> Result<()> {
     job_pool.scope(|scope| {
         if only_presence {
             all_counts = Some(kmer_tree::Node::Branch(counts)
-                              .consolidate(scope, join_methods, &|_, _, _| {})
-                              .counts);
+                .consolidate(scope, join_methods, &|_, _, _| {})
+                .counts);
         } else {
             all_counts = Some(kmer_tree::Node::Branch(counts)
-                              .consolidate(scope, join_methods, &|_, value, other| *value += other)
-                              .counts);
+                .consolidate(scope, join_methods, &|_, value, other| *value += other)
+                .counts);
         };
     });
     let counts = all_counts.unwrap();

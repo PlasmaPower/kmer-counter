@@ -45,10 +45,14 @@ fn main() {
         .author("Lee Bousfield <ljbousfield@gmail.com>")
         .about("Counts k-mers")
         .arg(clap::Arg::with_name("inputs")
-            .required(true)
+            .required_unless("stdin")
             .takes_value(true)
             .value_name("INPUT...")
             .help("The input FASTA files"))
+        .arg(clap::Arg::with_name("stdin")
+            .short("s")
+            .long("stdin")
+            .help("Take input from stdin (not exclusive with other inputs)"))
         .arg(clap::Arg::with_name("threads")
             .short("t")
             .long("threads")
@@ -135,6 +139,7 @@ fn main() {
 
     let runner_opts = runner::Options {
         inputs: inputs,
+        stdin: args.is_present("stdin"),
         kmer_len: KmerLength::new(kmer_len),
         min_count: min_count,
         only_presence: args.is_present("only_presence"),

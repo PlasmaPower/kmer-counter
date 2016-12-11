@@ -45,9 +45,7 @@ pub struct SectionReader<T> {
 
 impl<T: Iterator<Item = Result<u8>>> SectionReader<T> {
     pub fn new(file: T) -> SectionReader<T> {
-        SectionReader {
-            file: file,
-        }
+        SectionReader { file: file }
     }
 
     pub fn next_section<'a>(&'a mut self) -> Option<Result<Section<'a, T>>> {
