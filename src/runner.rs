@@ -1,70 +1,135 @@
 use std::io;
-use std::io::Write;
-use std::io::BufWriter;
+use std::io::Read;
+use std::sync::Mutex;
+use std::error::Error as ErrorTrait;
+
+use jobsteal;
 
 use errors::*;
-use run_counts;
+use kmer_length::KmerLength;
+use error_string::ErrorString;
+use get_kmers;
+use output_counts;
+use kmer_tree;
 
-use memmap;
-use memmap::Mmap;
-use rayon::prelude::*;
+use readers;
+use parsers;
 
+/// The list of options for the runner
 pub struct Options {
-    pub input: String,
-    pub kmer_len: u8,
+    pub inputs: Vec<String>,
+    pub stdin: bool,
+    pub kmer_len: KmerLength,
     pub min_count: u16,
     pub only_presence: bool,
+    pub threads: usize,
+    pub mmap: bool,
+    pub join_methods: Vec<kmer_tree::JoinMethod>,
 }
 
 pub fn run(opts: Options) -> Result<()> {
-    let count_opts = run_counts::Options {
-        kmer_len: opts.kmer_len,
-        only_presence: opts.only_presence,
-    };
-    let min_count = opts.min_count;
+    let Options {
+        inputs,
+        stdin,
+        kmer_len,
+        min_count,
+        only_presence,
+        threads,
+        mmap,
+        join_methods,
+    } = opts;
+    let mut job_pool = jobsteal::make_pool(threads).unwrap();
 
-    let input_mmap = try!(Mmap::open_path(opts.input, memmap::Protection::Read)
-        .chain_err(|| "Failed to open input file as a memory map"));
-    let input_slice = unsafe { input_mmap.as_slice() };
-    info!("Input file opened");
+    let stdin_handle = io::stdin();
 
-    let counts = run_counts::run_counts(input_slice, &count_opts)
-        .into_iter()
-        .filter_map(|n| n)
-        .filter(|&(_, c)| c >= min_count)
-        .collect::<Vec<_>>();
-
-    info!("Done counting {} k-mers", counts.len());
-    let kmer_len = opts.kmer_len as usize;
-    let mut output_list = Vec::new();
-    counts.par_iter()
-        .map(|&(mut kmer, count)| {
-            let mut kmer_str = vec![b'0'; kmer_len + 1];
-            kmer_str[kmer_len] = b'\t';
-            for i in (0..kmer_len).rev() {
-                let chr = match kmer & 0b11 {
-                    0b00 => b'A',
-                    0b01 => b'C',
-                    0b10 => b'G',
-                    0b11 => b'T',
-                    _ => unreachable!(),
-                };
-                kmer_str[i] = chr;
-                kmer = kmer >> 2;
+    let mut inputs = try!(inputs.into_iter()
+        .map(|input| {
+            if mmap {
+                readers::mmap::open(input).map(|it| {
+                        Box::new(it.map(Ok)) as Box<Iterator<Item = Result<u8>> + Send + Sync>
+                    })
+            } else {
+                readers::file::open(input)
+                    .map(|it| Box::new(it) as Box<Iterator<Item = Result<u8>> + Send + Sync>)
             }
-            (kmer_str, count)
         })
-        .collect_into(&mut output_list);
-    info!("Done transforming k-mers to text form");
+        .collect::<Result<Vec<_>>>());
+
+    if stdin {
+        inputs.push(Box::new(stdin_handle.bytes()
+                             .map(|r| r.chain_err(|| "Failed to read from stdin")))
+                    as Box<Iterator<Item = Result<u8>> + Send + Sync>);
+    }
+
+    // TODO: multiple parser types
+    let inputs = inputs.into_iter().map(parsers::multifasta::SectionReader::new);
+
+    let input_counts = Mutex::new(Ok(Vec::new()));
+    job_pool.scope(|scope| {
+        let input_counts_ref = &input_counts;
+        for mut input in inputs {
+            scope.submit(move || {
+                let mut section_counts = Ok(Vec::new());
+                while let Some(section) = input.next_section() {
+                    let kmers =
+                        section.and_then(|section| get_kmers::Kmers::new(section, kmer_len.clone()))
+                            .and_then(|kmer_iter| {
+                                kmer_iter.map(|r| r.map(|n| Some((n, 1))))
+                                    .collect::<Result<Vec<_>>>()
+                            })
+                            .map(|v| {
+                                kmer_tree::Node::Leaf(kmer_tree::Leaf {
+                                    counts: v,
+                                    sorted: false,
+                                })
+                            });
+                    match kmers {
+                        Err(e) => {
+                            section_counts = Err(e);
+                            break;
+                        }
+                        Ok(vec) => {
+                            let _ = section_counts.as_mut().map(|list| list.push(vec));
+                        }
+                    }
+                }
+                let section_counts = section_counts.map(kmer_tree::Node::Branch);
+                let mut input_counts = input_counts_ref.lock().unwrap();
+                match section_counts {
+                    Err(e) => *input_counts = Err(e),
+                    Ok(vec) => {
+                        let _ = input_counts.as_mut().map(|list| list.push(vec));
+                    }
+                }
+            });
+        }
+    });
+    let counts = try!(input_counts.into_inner()
+                      .map_err(|e| ErrorString::new(e.description().to_string())) // e is not Sync
+                      .chain_err(|| {
+                          "A k-mer counting thread panicked, poisoning the output mutex"
+                      }));
+    let counts = try!(counts.chain_err(|| "Encountered an error during k-mer counting"));
+    info!("Done counting {} k-mers", counts.len());
+
+    let mut all_counts = None;
+    let join_methods = join_methods.as_slice();
+    job_pool.scope(|scope| {
+        if only_presence {
+            all_counts = Some(kmer_tree::Node::Branch(counts)
+                .consolidate(scope, join_methods, &|_, _, _| {})
+                .counts);
+        } else {
+            all_counts = Some(kmer_tree::Node::Branch(counts)
+                .consolidate(scope, join_methods, &|_, value, other| *value += other)
+                .counts);
+        };
+    });
+    let counts = all_counts.unwrap();
+    info!("Done consolidating {} k-mers", counts.len());
 
     let stdout = io::stdout();
-    let mut stdout = BufWriter::new(stdout.lock());
-    for (kmer_str, count) in output_list {
-        try!(stdout.write(kmer_str.as_slice())
-            .and_then(|_| stdout.write(count.to_string().as_bytes()))
-            .and_then(|_| stdout.write(b"\n"))
-            .chain_err(|| "Failed to write k-mer to stdout"));
-    }
-    info!("Done outputting");
+    output_counts::output(stdout.lock(), counts, kmer_len, min_count);
+    info!("Done!");
     Ok(())
 }
