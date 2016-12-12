@@ -148,7 +148,7 @@ impl Node {
                 let mut sorting_queue = children.map(|n| {
                         let mut counts = n.counts;
                         if !n.sorted {
-                            sort(counts.as_mut_slice(), merge_dups, Some(spawner));
+                            sort(Some(spawner), counts.as_mut_slice(), merge_dups);
                         }
                         SortingQueueItem::new(counts)
                     })
